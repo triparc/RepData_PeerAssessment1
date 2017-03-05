@@ -5,21 +5,141 @@ output:
     keep_md: true
 ---
 
+```{r setup}
+library(knitr)
+knitr::opts_knit$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "E:\\Coursera\\Reproducible_Research\\RepData_PeerAssessment1-master\\Data\\")
+```
+
 
 ## Loading and preprocessing the data
+```{r}
+library(data.table)
+amdata <- read.table("activity.csv", header = TRUE,sep=",",stringsAsFactors = FALSE)
+head(amdata)
+```
 
+### Structure of Activity Management Data
+```{r}
+str(amdata)
+```
 
+### Convert date field to Date format
+```{r}
+amdata$date <- as.Date(amdata$date)
+str(amdata)
+```
+
+### Summary of Activity Data
+```{r}
+summary(amdata)
+```
 
 ## What is mean total number of steps taken per day?
 
+## Daily total steps:
+```{r}
+library(dplyr)
+library(ggplot2)
+library(xtable)
 
+daily_steps<- group_by(amdata, date)%>% summarise_each(funs(sum(steps, na.rm=TRUE))) %>% select("Date" = date, "Daily_total_steps"= steps)
+
+kable(head(daily_steps))
+```
+
+### Histogram of the total number of steps taken each day
+```{r}
+ggplot(amdata, aes(date, steps ))+geom_bar(stat="identity", fill="steelblue")+
+  theme(axis.text.x = element_text(angle =110, vjust = .5, color = "gray")) + 
+  xlab("Date") + 
+  ylab("Steps") + 
+  ggtitle("Total number of steps taken each day")
+```
+
+### Average daily steps:
+```{r }
+daily_mean <- round(mean(daily_steps$Daily_total_steps, na.rm=TRUE))
+```
+Average daily steps: `r daily_mean`
+
+### Daily median steps:
+```{r}
+library(xtable)
+daily_median_steps <- median(daily_steps$Daily_total_steps, na.rm=TRUE)
+```
+Daily median steps: `r daily_median_steps`
 
 ## What is the average daily activity pattern?
+```{r}
+library(dplyr)
+library(ggplot2)
+interval_steps<- group_by(amdata, interval)%>% summarise_each(funs(mean(steps, na.rm=TRUE))) %>% select("Interval"=interval, "Average_steps"= steps)
+max_interval_steps <- max(interval_steps$Average_steps, na.rm=TRUE)
+max_interval <- interval_steps[which(interval_steps$Average_steps == max_interval_steps),]$Interval
+ggplot(interval_steps, aes(x = Interval, y = Average_steps)) +
+         geom_line()+
+  xlab("Interval") + 
+  ylab("Number of steps") + 
+  ggtitle("Average daily activity pattern")
+```
 
-
+5-minute Interval `r max_interval` has maximum number of steps: `r max_interval_steps`
 
 ## Imputing missing values
+### Missing values will be imputed using mice package
+1. m  - Refers to number of imputed data sets  
+2. maxit - Refers to no. of iterations taken to impute missing values  
+3. method - Refers to method used in imputation  
+4. we will use (pmm) predictive mean matching as steps is a numeric variable  
+5. We will adda a new variable (isteps- imputed steps) to amdata
+```{r}
+library(mice)
+amdata_miss <- select(amdata, c(1,3))  # only select numerical variables
+am1 <- mice(amdata_miss, m=1, maxit = 5, method = 'pmm', seed = 500)
+amdata_miss <- complete(am1,1)
+amdata$isteps <- amdata_miss$steps
+```
 
+### Histogram of the total number of steps taken each day (with imputed vales for steps)
+```{r}
+ggplot(amdata, aes(date, isteps ))+geom_bar(stat="identity", fill="steelblue")+
+  theme(axis.text.x = element_text(angle =110, vjust = .5, color = "gray")) + 
+  xlab("Date") + 
+  ylab("Steps") + 
+  ggtitle("Total number of steps taken each day")
+```
 
+### Average daily steps(with imputed values):
+```{r }
+daily_isteps<- group_by(amdata, date)%>% summarise_each(funs(sum(isteps, na.rm=TRUE))) %>% select("Date" = date, "Daily_total_steps"= isteps)
+daily_imean <- round(mean(daily_steps$Daily_total_steps, na.rm=TRUE))
+```
+Average daily steps with imputation: `r daily_imean`  
+Average daily steps without imputation: `r daily_mean`  
+
+### Daily median steps:
+```{r}
+daily_median_isteps <- median(daily_steps$Daily_total_steps, na.rm=TRUE)
+```
+Daily median steps with imputation: `r daily_median_isteps`  
+Daily median steps without imputation: `r daily_median_steps` 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r}
+# Add one factor variable "daytype" to amdata
+amdata$daytype <- ifelse(weekdays(amdata$date)=="Sunday"|weekdays(amdata$date) == "Saturday","Weekend","Weekday")
+amdata$daytype <- as.factor(amdata$daytype)
+interval_isteps<- group_by(amdata, interval,daytype)%>% summarise_each(funs(mean(isteps, na.rm=TRUE)))
+```
+
+```{r}
+# Use ggplot2 to display a panal plot of time series
+ggplot(interval_isteps, aes(x = interval, y = isteps, col = daytype)) +
+  geom_line() + facet_grid( ~ daytype) +
+  xlab("Interval") + 
+  ylab("Number of steps") + 
+  ggtitle("Activity pattern between weekdays and weekends")
+```
+
